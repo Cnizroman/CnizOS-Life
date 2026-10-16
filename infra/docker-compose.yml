@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cnizos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cnizos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cnizos_secret}
+      POSTGRES_DB: cnizos
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cnizos"]
+      interval: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: cnizos-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://cnizos:${POSTGRES_PASSWORD:-cnizos_secret}@postgres:5432/cnizos
+      JWT_SECRET: ${JWT_SECRET:-change_me_please_64_chars_random}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend/storage:/app/storage
+      - bridge-config:/root/.config/CnizOS
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  # Optional: frontend static via nginx/caddy
+  # caddy:
+  #   image: caddy:2-alpine
+  #   ports: ["80:80","443:443"]
+
+volumes:
+  pgdata:
+  bridge-config:
